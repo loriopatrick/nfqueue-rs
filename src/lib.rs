@@ -269,22 +269,31 @@ impl<T: Send> Queue<T> {
         assert!(!self.qqh.is_null());
         assert!(!self.cb.is_none());
 
-        let fd = self.fd();
         let mut buf: [u8; 65536] = [0; 65536];
-        let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
-        let buf_len = buf.len() as libc::size_t;
 
         loop {
-            let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, 0) };
-            if rc < 0 {
-                Err::<(), _>(std::io::Error::last_os_error()).unwrap();
-            };
-
-            let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
-            if rv < 0 {
-                println!("error in nfq_handle_packet()");
-            }; // not critical
+            self.run(&mut buf).unwrap();
         }
+    }
+
+    pub fn run(&self, buffer: &mut [u8]) -> std::io::Result<()> {
+        let fd = self.fd();
+
+        let buf_ptr = buffer.as_mut_ptr() as *mut libc::c_void;
+        let buf_len = buffer.len() as libc::size_t;
+
+        let rc = unsafe { libc::recv(fd, buf_ptr, buf_len, 0) };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
+        if rv < 0 {
+            // return Err(std::io::Error::last_os_error());
+            println!("error in nfq_handle_packet()");
+        }; // not critical
+
+        Ok(())
     }
 }
 
